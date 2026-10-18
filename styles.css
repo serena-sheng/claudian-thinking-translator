@@ -1,0 +1,73 @@
+/* Claudian Thinking Translator — 样式 */
+
+/* 有译文时默认藏起原文 */
+.claudian-thinking-block.ctt-has-translation:not(.ctt-show-original) > .claudian-thinking-content {
+    display: none;
+}
+
+/* 看原文时藏起译文 */
+.claudian-thinking-block.ctt-show-original > .ctt-translation {
+    display: none;
+}
+
+/* 折叠状态下，翻译条与译文跟随内容一起藏起来 */
+.claudian-thinking-block:not(.expanded) > .ctt-bar,
+.claudian-thinking-block:not(.expanded) > .ctt-translation,
+.claudian-thinking-block > .claudian-thinking-content.claudian-hidden ~ .ctt-bar,
+.claudian-thinking-block > .claudian-thinking-content.claudian-hidden ~ .ctt-translation {
+    display: none;
+}
+
+.ctt-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 2px 0 0 24px;
+    font-size: 11px;
+    color: var(--text-faint);
+    line-height: 1.6;
+}
+
+.ctt-status {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+}
+
+.ctt-status.is-busy {
+    color: var(--claudian-brand, var(--interactive-accent));
+}
+
+.ctt-status.is-error {
+    color: var(--text-error);
+}
+
+.ctt-toggle {
+    padding: 0 6px;
+    height: 18px;
+    font-size: 11px;
+    line-height: 1;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    box-shadow: none;
+}
+
+.ctt-toggle:hover {
+    color: var(--text-normal);
+    border-color: var(--interactive-accent);
+}
+
+.ctt-translation {
+    padding: 2px 0 6px 24px;
+    margin-inline-start: 7px;
+    border-inline-start: 1px solid var(--background-modifier-border);
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-muted);
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 400px;
+    overflow-y: auto;
+}
