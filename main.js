@@ -44,15 +44,13 @@ function execFileP(cmd, args, opts) {
 }
 
 /**
- * Obsidian 的 GUI 进程只有 /usr/bin:/bin:/usr/sbin:/sbin，直接 execFile('op') 会 ENOENT。
- * 不碰文件系统：按候选顺序直接尝试执行，靠 spawn 的 ENOENT 判断有没有这个二进制。
+ * Obsidian 的 GUI 进程 PATH 很窄，直接 execFile('op') 常常 ENOENT。
+ * 交给登录 shell 解析 PATH（不读环境、不碰文件系统），密钥只走 stdin/参数传递。
  */
-function opCandidates() {
-    const home = process.env.HOME || '';
-    const list = [];
-    if (home) list.push(home + '/.local/bin/op');
-    list.push('/opt/homebrew/bin/op', '/usr/local/bin/op', '/usr/bin/op', 'op');
-    return list;
+function opRead(ref, timeoutMs) {
+    return execFileP('/bin/sh', ['-lc', 'op read "$1"', 'sh', ref], {
+        timeout: timeoutMs || 30000,
+    });
 }
 
 function countLetters(t) {
@@ -919,36 +917,25 @@ class ClaudianThinkingTranslator extends Plugin {
         const ref = String(this.settings.secretRef || '').trim();
         let key = '';
         if (ref.startsWith('op://')) {
-            const bins = this.opPath ? [this.opPath] : opCandidates();
-            let lastMissing = true;
-            for (const bin of bins) {
-                try {
-                    key = (await execFileP(bin, ['read', ref], { timeout: 30000 })).trim();
-                    if (key) {
-                        this.opPath = bin;
-                        lastMissing = false;
-                        break;
-                    }
-                } catch (e) {
-                    const msg = String((e && e.message) || e);
-                    if (msg.includes('ENOENT')) continue; // 这个位置没有 op，换下一个
-                    lastMissing = false;
-                    this.keyFailAt = Date.now();
-                    throw new Error('1Password 取密钥失败（需要解锁或 Touch ID）：' + msg);
-                }
+            try {
+                key = (await opRead(ref)).trim();
+            } catch (e) {
+                this.keyFailAt = Date.now();
+                const msg = String((e && e.message) || e);
+                throw new Error(
+                    msg.includes('command not found') || msg.includes('ENOENT')
+                        ? '找不到 1Password CLI（op），请确认已安装'
+                        : '1Password 取密钥失败（需要解锁或 Touch ID）：' + msg
+                );
             }
             if (!key) {
                 this.keyFailAt = Date.now();
-                throw new Error(
-                    lastMissing
-                        ? '找不到 1Password CLI（op），请确认已安装'
-                        : '1Password 返回了空密钥'
-                );
+                throw new Error('1Password 返回了空密钥');
             }
         } else if (ref) {
             key = ref;
         } else {
-            key = process.env.DEEPSEEK_API_KEY || '';
+            key = '';
         }
         if (!key) throw new Error('未配置 API 密钥');
         this.keyFailAt = 0;
