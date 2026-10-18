@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1 — 2026-10-18
+
+### Fixed（社区目录审核警告）
+- 移除 `fs` / `os` / `path` 三个 Node 模块：审核指出 `fs` 直接访问文件系统会读写出 vault 之外的任意文件。
+- `op` 二进制的定位改为「按候选路径直接执行，靠 ENOENT 判断」，不再用 `fs.existsSync` 探测；成功后缓存路径。
+
 ## 0.3.0 — 2026-10-18
 
 ### Submission compliance（按 Obsidian 审核要求）

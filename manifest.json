@@ -1,7 +1,7 @@
 {
   "id": "claudian-thinking-translator",
   "name": "Claudian Thinking Translator",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "minAppVersion": "1.13.0",
   "description": "Translate Claudian's thinking into Chinese as it streams, only when you expand a block.",
   "author": "Serena Sheng",

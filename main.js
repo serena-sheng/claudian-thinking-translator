@@ -2,9 +2,6 @@
 
 const { Plugin, PluginSettingTab, Setting, Notice, requestUrl } = require('obsidian');
 const https = require('https');
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
 const { execFile } = require('child_process');
 
 /* ------------------------------------------------------------------ */
@@ -48,23 +45,14 @@ function execFileP(cmd, args, opts) {
 
 /**
  * Obsidian 的 GUI 进程只有 /usr/bin:/bin:/usr/sbin:/sbin，直接 execFile('op') 会 ENOENT。
- * 这里显式找常见安装位置。
+ * 不碰文件系统：按候选顺序直接尝试执行，靠 spawn 的 ENOENT 判断有没有这个二进制。
  */
-function resolveOpBinary() {
-    const candidates = [
-        path.join(os.homedir(), '.local/bin/op'),
-        '/opt/homebrew/bin/op',
-        '/usr/local/bin/op',
-        '/usr/bin/op',
-    ];
-    for (const c of candidates) {
-        try {
-            if (fs.existsSync(c)) return c;
-        } catch (e) {
-            /* ignore */
-        }
-    }
-    return 'op';
+function opCandidates() {
+    const home = process.env.HOME || '';
+    const list = [];
+    if (home) list.push(home + '/.local/bin/op');
+    list.push('/opt/homebrew/bin/op', '/usr/local/bin/op', '/usr/bin/op', 'op');
+    return list;
 }
 
 function countLetters(t) {
@@ -931,13 +919,31 @@ class ClaudianThinkingTranslator extends Plugin {
         const ref = String(this.settings.secretRef || '').trim();
         let key = '';
         if (ref.startsWith('op://')) {
-            try {
-                key = (
-                    await execFileP(resolveOpBinary(), ['read', ref], { timeout: 30000 })
-                ).trim();
-            } catch (e) {
+            const bins = this.opPath ? [this.opPath] : opCandidates();
+            let lastMissing = true;
+            for (const bin of bins) {
+                try {
+                    key = (await execFileP(bin, ['read', ref], { timeout: 30000 })).trim();
+                    if (key) {
+                        this.opPath = bin;
+                        lastMissing = false;
+                        break;
+                    }
+                } catch (e) {
+                    const msg = String((e && e.message) || e);
+                    if (msg.includes('ENOENT')) continue; // 这个位置没有 op，换下一个
+                    lastMissing = false;
+                    this.keyFailAt = Date.now();
+                    throw new Error('1Password 取密钥失败（需要解锁或 Touch ID）：' + msg);
+                }
+            }
+            if (!key) {
                 this.keyFailAt = Date.now();
-                throw new Error('1Password 取密钥失败（需要解锁或 Touch ID）：' + (e && e.message ? e.message : e));
+                throw new Error(
+                    lastMissing
+                        ? '找不到 1Password CLI（op），请确认已安装'
+                        : '1Password 返回了空密钥'
+                );
             }
         } else if (ref) {
             key = ref;
