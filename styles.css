@@ -1,16 +1,15 @@
-/* Claudian Thinking Translator — 样式 */
+/* ============================================================
+   Claudian Thinking Translator — 译文栏（Rail Note）
+   规则：同一条竖线上，实线 = 原文，虚线 = 机器译文。
+   ============================================================ */
 
-/* 有译文时默认藏起原文 */
+/* —— 行为规则 —— */
 .claudian-thinking-block.ctt-has-translation:not(.ctt-show-original) > .claudian-thinking-content {
     display: none;
 }
-
-/* 看原文时藏起译文 */
 .claudian-thinking-block.ctt-show-original > .ctt-translation {
     display: none;
 }
-
-/* 折叠状态下，翻译条与译文跟随内容一起藏起来 */
 .claudian-thinking-block:not(.expanded) > .ctt-bar,
 .claudian-thinking-block:not(.expanded) > .ctt-translation,
 .claudian-thinking-block > .claudian-thinking-content.claudian-hidden ~ .ctt-bar,
@@ -18,56 +17,170 @@
     display: none;
 }
 
+/* 未进入翻译态的块：不渲染任何自己的东西 */
+.ctt-bar.is-hidden,
+.ctt-translation.is-hidden,
+.ctt-status.is-hidden,
+.ctt-toggle.is-hidden,
+.ctt-retry.is-hidden {
+    display: none;
+}
+
+/* —— 几何：复刻宿主 content 的三级缩进 ——
+   宿主 .claudian-thinking-content = margin 7px + border 1px + padding 24px。 */
+.ctt-bar,
+.ctt-translation {
+    --ctt-rail-offset: 7px;
+    --ctt-rail-width: 1px;
+    --ctt-gutter: 24px;
+}
+
+/* —— 状态栏：是译文的题注，不是日志 —— */
 .ctt-bar {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 2px 0 0 24px;
-    font-size: 11px;
-    color: var(--text-faint);
-    line-height: 1.6;
+    min-height: 22px;
+    margin-inline-start: calc(var(--ctt-rail-offset) + var(--ctt-rail-width));
+    padding-inline-start: var(--ctt-gutter);
+    padding-block: 4px 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-muted);
+}
+
+.ctt-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-inline-start: auto;
 }
 
 .ctt-status {
-    font-variant-numeric: tabular-nums;
-    letter-spacing: 0.02em;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
+/* 进行中：不上 accent 色，只比常态重一档 */
 .ctt-status.is-busy {
-    color: var(--claudian-brand, var(--interactive-accent));
+    color: var(--text-normal);
 }
 
+/* 状态恒为次要色；红色留给可点的重试，避免「红字不可点」 */
 .ctt-status.is-error {
-    color: var(--text-error);
+    color: var(--text-muted);
+}
+
+/* —— 切换 / 重试：22px 高，可点，有按下态 —— */
+.ctt-toggle,
+.ctt-retry {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 22px;
+    padding: 0 6px;
+    margin: 0;
+    position: relative;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1;
+    color: var(--text-muted) !important;
+    background: transparent !important;
+    border: 1px solid transparent !important;
+    border-radius: 5px;
+    box-shadow: none;
+    cursor: pointer;
+    transition: color 120ms ease, background-color 120ms ease,
+                border-color 120ms ease;
+}
+
+/* ⇄ 说出「这是切换，不是标签」 */
+.ctt-toggle::before {
+    content: "⇄";
+    font-size: 12px;
+    opacity: 0.75;
+}
+
+.ctt-retry {
+    order: 1;
+    color: var(--text-error) !important;
 }
 
 .ctt-toggle {
-    padding: 0 6px;
-    height: 18px;
-    font-size: 11px;
-    line-height: 1;
-    border: 1px solid var(--background-modifier-border);
-    border-radius: 4px;
-    background: transparent;
-    color: var(--text-muted);
-    cursor: pointer;
-    box-shadow: none;
+    order: 2;
 }
 
-.ctt-toggle:hover {
-    color: var(--text-normal);
-    border-color: var(--interactive-accent);
+@media (hover: hover) and (pointer: fine) {
+    .ctt-toggle:hover,
+    .ctt-retry:hover {
+        color: var(--text-normal) !important;
+        background: var(--background-modifier-hover) !important;
+        border-color: var(--background-modifier-border) !important;
+    }
 }
 
+.ctt-toggle:focus-visible,
+.ctt-retry:focus-visible {
+    outline: 2px solid var(--interactive-accent);
+    outline-offset: 1px;
+}
+
+/* 不可见热区：22px 高的小字按钮向外撑到约 40px，不新增任何可见盒子 */
+.ctt-toggle::after,
+.ctt-retry::after {
+    content: "";
+    position: absolute;
+    inset: -9px -6px;
+}
+
+/* 触屏没有 hover，用按下态给反馈 */
+.ctt-toggle:active,
+.ctt-retry:active {
+    background: var(--background-modifier-hover) !important;
+}
+
+/* 正在看原文：按钮停在「按下」态，而不是回到中性 */
+/* 正在看原文：只加重文字，不再叠加一层填充 */
+.claudian-thinking-block.ctt-show-original .ctt-toggle {
+    color: var(--text-normal) !important;
+}
+
+/* —— 译文：同字号，靠线型 + 行高分出「另一层」 —— */
 .ctt-translation {
-    padding: 2px 0 6px 24px;
-    margin-inline-start: 7px;
-    border-inline-start: 1px solid var(--background-modifier-border);
+    position: relative;
+    margin-inline-start: var(--ctt-rail-offset);
+    padding-inline-start: calc(var(--ctt-rail-width) + var(--ctt-gutter));
+    padding-block: 1px 6px;
     font-size: 13px;
-    line-height: 1.6;
+    line-height: 1.75;
     color: var(--text-muted);
+    letter-spacing: normal;
+    line-break: strict;
     white-space: pre-wrap;
     word-break: break-word;
-    max-height: 400px;
-    overflow-y: auto;
+}
+
+/* 机器译文的轨线：同色、只用节奏区分（5px 实 / 4px 空），比 1px dashed 可读 */
+.ctt-translation::before {
+    content: "";
+    position: absolute;
+    inset-block: 1px 6px;
+    inset-inline-start: 0;
+    width: var(--ctt-rail-width);
+    background: repeating-linear-gradient(
+        to bottom,
+        var(--background-modifier-border) 0 5px,
+        transparent 5px 9px
+    );
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ctt-toggle,
+    .ctt-retry {
+        transition: color 120ms ease, background-color 120ms ease;
+    }
 }

@@ -1,7 +1,7 @@
 {
   "id": "claudian-thinking-translator",
   "name": "Claudian Thinking Translator",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "minAppVersion": "1.13.0",
   "description": "把 Claudian 的思考过程实时译成中文：只在展开思考块时翻译，默认显示译文，点击可看原文；默认免费机翻，无需密钥。",
   "author": "Serena Sheng",

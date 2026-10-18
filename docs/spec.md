@@ -56,37 +56,53 @@
 
 ### 3.3 状态机
 
-| 状态文案 | 触发条件 | 终态？ |
+界面只讲读者语言，不讲段数、引擎名与内部判断。
+
+| 状态 | 触发条件 | 界面表现 |
 |---|---|---|
-| `待译` | 块被武装并首次建 UI（初始态） | 否 |
-| `翻译中…`（`is-busy`） | `runJob` 开始处理该段 | 否 |
-| `已译 N 段` | 一段成功后，`N=segments`；免费引擎尾缀加 ` · <引擎名>` | 是（后续段追加，N 递增） |
-| `已译 N 段 · 术语待核` | `finalizeTranslation` 判定：有术语占位符未被还原，或模型凭空输出 `⟦…⟧` 被清除 | 是 |
-| 组合形态 | `已译 N 段 · 术语待核 · <引擎名>`（免费引擎 + 术语受损时三段式，顺序固定） | 是 |
-| `中文·跳过` | `enqueue` 检测到 `han > 0 && han > letters`（纯中文 `letters=0` 同样命中） | 是（不发请求） |
-| `译失败`（`is-error`） | `pumpQueue` catch：该段请求链全失败 | 是（新文本触发再翻时重置为 `翻译中…`） |
+| 待译 | 已武装、还没入队 | **不渲染任何自有节点**（连 `.ctt-bar` 都没有） |
+| 翻译中（首字未到） | `runJob` 开始 | 题注 `正在译成中文`；无按钮；原文仍显示 |
+| 已译 | 首段译文到达 | 题注清空；只留 `⇄ 看原文`；原文隐藏 |
+| 原文视图 | 点 `看原文` | 只留 `⇄ 看译文`；译文隐藏、原文显示 |
+| 个别词可能不准 | `finalizeTranslation` 判定术语受损 | 题注 `个别词可能不准` + `看原文` |
+| 失败 · 无译文 | 该段整链失败且无已有译文 | 题注 `没能译成中文` + `重试`；切换按钮隐藏 |
+| 失败 · 有部分译文 | 失败但已有译文 | 无题注（不宣称定位不到的缺口）+ `重译` + `看原文` |
+| 中文内容 | `han > 0 && han > letters` | **不渲染任何自有节点**，不发请求 |
+| 重试进行中 | 点 `重试` / `重译` | 回到 `正在译成中文`，按钮消失 |
 
-**并发与切分**：
+**布局与并发**
 
-- 跨块并发上限：免费引擎 3、DeepSeek 1；**同一块严格串行**（`BlockState.busy`），避免两份 job 共享 `outBuf/store` 把术语串味。
-- 切分：句边界优先；超过 `chunkChars*2` 仍无边界则硬切。`idleMs` 后的尾段同样受 `chunkChars` 约束，超出则先切一段、剩下的下一轮继续。
-- 关闭 `enabled` 或卸载：`teardownDom()` 清空队列、移除全部 `.ctt-*` 节点与类、`generation++`；在途请求的结果按代次丢弃。
-
-- 收起再展开：首次扫描时已存在的块记入 `preExisting`（`armed=false`，不主动翻）；折叠时加入 `reArmed`，重新展开后 `armed=true` → 重新翻译。`translateExistingOnLoad=true` 时，仅**当前视口内**的预存在块直接武装（防止一次排入上百个块）。
+- 题注行 `.ctt-bar` 插在宿主 header 之后、原文 content **之前**；否则看原文时按钮会被长段落挤到屏幕外。
+- 控件收在 `.ctt-actions` 里，`margin-inline-start:auto` 钉在行尾；`重试/重译` 在 `看原文` 左侧；换视图时右缘坐标不变。
+- 跨块并发上限：免费 3、DeepSeek 1；**同一块严格串行**（`st.busy`）。
+- 切分：句边界优先；超 `chunkChars*2` 硬切；`idleMs` 尾段同样受 `chunkChars` 约束。
+- 关闭 `enabled` 或卸载：`teardownDom()` 清空队列、移除全部自有节点与类、`generation++`，在途结果按代次丢弃。
+- 收起再展开：首次扫描已存在的块记入 `preExisting`（不主动翻）；折叠后进 `reArmed`，再展开才翻。`translateExistingOnLoad=true` 时只武装**视口内**的预存在块。
 
 ### 3.4 DOM 契约
 
-注入到 `.claudian-thinking-block` 的**子节点**（作为 `.claudian-thinking-content` 之后的后继兄弟）：
+注入到 `.claudian-thinking-block` 的**子节点**，顺序固定：
 
-- `div.ctt-bar`：容器，含 `span.ctt-status`（状态文案）与 `button.ctt-toggle`（文案 `原文` / `译文`）。
-- `div.ctt-translation`：译文文本。
+1. `.ctt-bar`（插在宿主 `.claudian-thinking-content` 之前）
+   - `span.ctt-status`：题注；无文案时加 `.is-hidden`
+   - `div.ctt-actions`
+     - `button.ctt-toggle`：`看原文` / `看译文`
+     - `button.ctt-retry`：`重试` / `重译`
+2. `.ctt-translation`（译文，纯文本 + `white-space:pre-wrap`）
 
 类名联动：
 
-- 译文非空 → 块加 `.ctt-has-translation`；`.ctt-has-translation:not(.ctt-show-original) > .claudian-thinking-content` 隐藏原文。
-- 点 toggle → 切换块的 `.ctt-show-original`；`.ctt-show-original > .ctt-translation` 隐藏译文。
-- `.claudian-thinking-block:not(.expanded) > .ctt-bar / .ctt-translation` 折叠时隐藏。
-- `.claudian-thinking-content.claudian-hidden ~ .ctt-bar / .ctt-translation`：内容折叠态时翻译条与译文一并隐藏。
+- 首段译文到达 → 块加 `.ctt-has-translation`；`.ctt-has-translation:not(.ctt-show-original) > .claudian-thinking-content` 隐藏原文。
+- 点切换 → `.ctt-show-original`；`.ctt-show-original > .ctt-translation` 隐藏译文。
+- 折叠（块失去 `.expanded`）→ `.ctt-bar` 与 `.ctt-translation` 一起隐藏。
+- 未进入翻译态 → `.ctt-bar.is-hidden`，不占位。
+
+视觉语法（Rail Note）：
+
+- 原文 = 宿主 1px **实线**；译文 = 同色 1px **节奏线**（`repeating-linear-gradient` 5px/4px 伪元素）。
+- 译文不再使用 `max-height` 嵌套滚动，交给宿主滚动。
+- 控件常态无边框无底色（ghost），仅 `:hover` / `:focus-visible` / `:active` 显形；`::after` 把热区外扩到约 40px。
+- 字号：题注与按钮 12px，译文 13px / 行高 1.75。
 
 ### 3.5 错误码 / 失败表现表
 
@@ -103,24 +119,18 @@
 
 ## 4. 验收条件
 
-1. 展开一个含英文思考的块，出现 `ctt-bar` 与 `ctt-status`，初始文案为「待译」。
-2. 英文内容超过 `minChars` 且出现切点后，状态变为「翻译中…」，随后变为「已译 N 段」且 `ctt-translation` 出现非空中文。
-3. 译文出现后，原文 `.claudian-thinking-content` 被隐藏（块带 `ctt-has-translation`）。
-4. 点「原文」按钮：块加 `ctt-show-original`、原文显示、译文隐藏、按钮文案变「译文」；再点恢复。
-5. 折叠思考块后，`ctt-bar` 与 `ctt-translation` 均不可见；重新展开重新出现。
-6. 折叠期间插件不发出任何翻译请求（网络面板零请求）。
-7. 关闭 `enabled` 开关后，展开块不再出现翻译条、无请求；打开后恢复。
-8. 纯中文思考内容：状态显示「中文·跳过」，无请求。
-9. 断网（引擎 `google`）下翻译：状态最终为「译失败」且弹出一次 Notice「思考翻译失败：…」。
-10. 引擎切到 `deepseek` 且 1Password 锁定：状态「译失败」，Notice 文案含「1Password 取密钥失败」。
-11. 引擎 `deepseek`、密钥有效：翻译成功，状态为「已译 N 段」（无 ` · 机翻` 尾缀）。
-12. 引擎 `google`、翻译成功：状态尾缀为 ` · Google` / ` · Google(gtx)` / ` · MyMemory` 之一。
-13. 设置「加载时翻译已展开的块」关闭时，重启/重载后已展开的历史块不主动翻；收起再展开才翻。
-14. `translateExistingOnLoad=true` 时，重载后已展开块直接翻译。
-15. 术语白名单词（如 `Claudian`）在译文中保持英文原样。
-16. `debug=true` 时控制台出现 `[CTT]` 日志；`debug=false` 时无。
-17. 命令「测试翻译接口」：引擎 `google` 弹「翻译自测（<引擎>）：…」Notice；`deepseek` 弹「翻译自测：…」。
-18. 卸载/重载插件后，DOM 中不再残留 `.ctt-bar` / `.ctt-translation` / `.ctt-has-translation` / `.ctt-show-original`。
+1. 展开一个还没开始翻译的英文块：块内**没有任何** `.ctt-bar` 与按钮。
+2. 翻译开始、首字未到：只出现 `正在译成中文`，没有按钮，原文仍可读。
+3. 首字到达：原文消失、译文出现；题注行只有一个 `⇄ 看原文`，没有数字、没有引擎名。
+4. 点 `看原文`：原文出现、译文消失、按钮原地变 `⇄ 看译文`，且按钮右缘坐标不变；再点恢复。
+5. 术语受损：出现（不可点的）`个别词可能不准` 与 `看原文`；该文字不可 Tab 聚焦。
+6. 失败且无译文：`没能译成中文` + `重试`，无 `看原文`；点重试后按钮消失、回到 `正在译成中文`，恢复后出译文。
+7. 失败但已有译文：无题注，`重译` 在左、`看原文` 在右；点 `重译` 不清空已有译文。
+8. 纯中文块：不出现 `.ctt-bar`，零请求；折叠再展开同样为零。
+9. 折叠展示中的块：题注与译文一起消失；翻译完成后重新展开，译文直接可见且不产生新请求。
+10. 关闭 `enabled`：所有 `.ctt-bar` / `.ctt-translation` 立即移除，零请求；重新开启后恢复。
+11. 亮/暗主题：只用 Obsidian 变量；两套主题下按钮常态均无底色无描边。
+12. 键盘：按钮为原生 `button[type=button]`，Tab 可达，`focus-visible` 有 2px 轮廓，Enter/Space 等同点击。
 
 ## 5. 已知风险
 

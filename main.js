@@ -491,28 +491,110 @@ class BlockState {
     }
 
     buildUi() {
-        this.barEl = this.el.createDiv({ cls: 'ctt-bar' });
-        this.statusEl = this.barEl.createSpan({ cls: 'ctt-status', text: '待译' });
-        this.toggleEl = this.barEl.createEl('button', {
+        this.barEl = this.el.createDiv({ cls: 'ctt-bar is-hidden' });
+        // 题注要在原文之前：否则「看原文」时按钮会被长原文挤到屏幕外，回不去译文
+        const contentEl = this.el.querySelector(':scope > .claudian-thinking-content');
+        if (contentEl) this.el.insertBefore(this.barEl, contentEl);
+        this.statusEl = this.barEl.createSpan({ cls: 'ctt-status' });
+
+        this.actionsEl = this.barEl.createDiv({ cls: 'ctt-actions' });
+
+        this.toggleEl = this.actionsEl.createEl('button', {
             cls: 'ctt-toggle',
-            text: '原文',
-            attr: { 'aria-label': '在译文与原文之间切换' },
+            text: '看原文',
+            attr: { type: 'button' },
         });
         this.toggleEl.addEventListener('click', (ev) => {
             ev.preventDefault();
             ev.stopPropagation();
             const showing = this.el.hasClass('ctt-show-original');
             this.el.toggleClass('ctt-show-original', !showing);
-            this.toggleEl.setText(!showing ? '译文' : '原文');
+            this.toggleEl.setText(showing ? '看原文' : '看译文');
         });
-        this.transEl = this.el.createDiv({ cls: 'ctt-translation' });
+
+        this.retryEl = this.actionsEl.createEl('button', {
+            cls: 'ctt-retry',
+            text: '重试',
+            attr: { type: 'button' },
+        });
+        this.retryEl.addEventListener('click', (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            this.retry();
+        });
+
+        this.transEl = this.el.createDiv({ cls: 'ctt-translation is-hidden' });
         this.barEl.addEventListener('click', (ev) => ev.stopPropagation());
     }
 
     setStatus(text, cls) {
         if (!this.statusEl) return;
-        this.statusEl.setText(text);
+        this.statusEl.setText(text || '');
         this.statusEl.className = 'ctt-status' + (cls ? ' ' + cls : '');
+        this.statusEl.toggleClass('is-hidden', !text);
+    }
+
+    updateToggleLabel() {
+        this.toggleEl.setText(this.el.hasClass('ctt-show-original') ? '看译文' : '看原文');
+    }
+
+    /** 正在译成中文：只有说明，没有可点的东西（原文还在眼前） */
+    showTranslating() {
+        this.ensureUi();
+        this.barEl.removeClass('is-hidden');
+        this.setStatus('正在译成中文', 'is-busy');
+        this.toggleEl.addClass('is-hidden');
+        this.retryEl.addClass('is-hidden');
+    }
+
+    /** 已有译文：不宣布完成，只留一个「看原文」 */
+    showTranslation() {
+        this.ensureUi();
+        this.barEl.removeClass('is-hidden');
+        this.setStatus('');
+        this.retryEl.addClass('is-hidden');
+        this.toggleEl.removeClass('is-hidden');
+        this.updateToggleLabel();
+    }
+
+    /** 术语可能被改写：加一句提醒，控件照旧 */
+    showDegraded() {
+        this.ensureUi();
+        this.barEl.removeClass('is-hidden');
+        this.setStatus('个别词可能不准');
+        this.retryEl.addClass('is-hidden');
+        this.toggleEl.removeClass('is-hidden');
+        this.updateToggleLabel();
+    }
+
+    /** 失败：说结果、给重试；已有译文时才保留切换 */
+    showFailed() {
+        this.ensureUi();
+        this.barEl.removeClass('is-hidden');
+        // 已有译文时不宣称「有一处没译成」——画面上定位不到那句缺口，只留重译
+        this.setStatus(this.hasTranslation ? '' : '没能译成中文', 'is-error');
+        this.retryEl.setText(this.hasTranslation ? '重译' : '重试');
+        this.retryEl.removeClass('is-hidden');
+        if (this.hasTranslation) {
+            this.toggleEl.removeClass('is-hidden');
+            this.updateToggleLabel();
+        } else {
+            this.toggleEl.addClass('is-hidden');
+        }
+    }
+
+    hideAll() {
+        if (!this.uiBuilt) return;
+        this.barEl.addClass('is-hidden');
+        this.transEl.addClass('is-hidden');
+    }
+
+    retry() {
+        if (!this.failedText) return;
+        const text = this.failedText;
+        this.failedText = null;
+        this.showTranslating();
+        this.plugin.enqueue(this, text);
     }
 
     queueRender() {
@@ -522,9 +604,11 @@ class BlockState {
             if (!this.transEl) return;
             const text = this.doneText + restoreText(this.outBuf, this.store);
             this.transEl.setText(text);
+            this.transEl.removeClass('is-hidden');
             if (text.trim() && !this.hasTranslation) {
                 this.hasTranslation = true;
                 this.el.addClass('ctt-has-translation');
+                this.showTranslation();
             }
         }, RENDER_MS);
     }
@@ -670,7 +754,6 @@ class ClaudianThinkingTranslator extends Plugin {
     }
 
     trackBlock(st, text) {
-        st.ensureUi();
         if (text !== st.lastSource) {
             const cp = commonPrefix(st.lastSource, text);
             if (cp < st.consumed) st.consumed = cp; // 重渲染导致回退，重新对齐
@@ -712,7 +795,7 @@ class ClaudianThinkingTranslator extends Plugin {
         const letters = countLetters(probe);
         const han = countHan(probe);
         if (han > 0 && han > letters) {     // 已经是中文（纯中文时 letters=0）
-            st.setStatus('中文·跳过');
+            st.hideAll();
             return;
         }
         if (letters < 10) return;           // 没有可译内容
@@ -743,14 +826,8 @@ class ClaudianThinkingTranslator extends Plugin {
                     this.stats.errors++;
                     this.lastError = String((e && e.message) || e);
                     this.log('job failed', this.lastError);
-                    job.st.setStatus('译失败', 'is-error');
-                    if (!job.st.errorNotified) {
-                        job.st.errorNotified = true;
-                        new Notice(
-                            '思考翻译失败：' + (e && e.message ? e.message : e),
-                            6000
-                        );
-                    }
+                    job.st.failedText = job.text;
+                    job.st.showFailed();
                 })
                 .finally(() => {
                     job.st.busy = false;
@@ -767,7 +844,7 @@ class ClaudianThinkingTranslator extends Plugin {
 
         st.outBuf = '';
         st.store = store;
-        st.setStatus('翻译中…', 'is-busy');
+        st.showTranslating();
 
         if (settings.engine === 'deepseek') {
             const key = await this.getApiKey();
@@ -825,15 +902,14 @@ class ClaudianThinkingTranslator extends Plugin {
         }
         if (st.transEl) {
             st.transEl.setText(st.doneText);
+            st.transEl.removeClass('is-hidden');
             if (st.doneText.trim() && !st.hasTranslation) {
                 st.hasTranslation = true;
                 st.el.addClass('ctt-has-translation');
             }
         }
-        const tag = settings.engine === 'deepseek' ? '' : ' · ' + (this.lastEngine || '机翻');
-        st.setStatus(
-            '已译 ' + st.segments + ' 段' + (fin.degraded ? ' · 术语待核' : '') + tag
-        );
+        if (fin.degraded) st.showDegraded();
+        else st.showTranslation();
         this.log('translated', raw.length, '->', restored.length);
     }
 

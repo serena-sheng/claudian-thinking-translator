@@ -50,3 +50,18 @@ obsidian vault="Serena-heart" eval code="(async()=>{
 - 关闭 `enabled` → 无请求、无新 UI
 - 卸载重载 → DOM 零残留
 - `glossary` / `minChars` / `chunkChars` / `idleMs` / `debug` 五项接线均有可观察效果
+
+## UI 打磨（0.3.0，两轮）
+
+| # | 声称 | 证据 | 谁验的 |
+|---|---|---|---|
+| 18 | 控件不再抢首眼 | 逐像素扫描：按钮外接区域四向 0 个非底色像素，常态无描边无填充 | taste-critic |
+| 19 | 控件位置稳定 | 四个含操作状态右缘同为 x=1448，`看原文↔看译文` 换字不重排 | taste-critic |
+| 20 | 状态文案读者化 | 已译态无数字无引擎；中文块 0 个 `.ctt-bar` | builder（eval） |
+| 21 | 失败态可恢复 | 断网 stub → `没能译成中文` + 重试；点重试 → `正在译成中文` → 译文出现 | builder（eval） |
+| 22 | ghost 在真实主题下成立 | 实机 `getComputedStyle`：按钮 `background rgba(0,0,0,0)`、`border rgba(0,0,0,0)`、字色 `rgb(133,133,133)` | builder（eval） |
+| 23 | 重试与状态视觉分层 | 失败态：状态 `rgb(133,133,133)`、重试 `rgb(233,49,71)` | builder（eval） |
+| 24 | 轨线可读 | 译文伪元素 `repeating-linear-gradient` 生效，宽 1px | builder（eval） |
+| 25 | 部分失败不再空口断言 | 有译文时题注为空、按钮为 `重译` | builder（eval） |
+
+设计评审结论：UX 定文案与状态、UI 给两方向（栏注 / 对照卡）选栏注、taste-critic 两轮后判「可以发」，剩余为 P2 级遗憾（译文行宽受宿主栏宽限制）。
