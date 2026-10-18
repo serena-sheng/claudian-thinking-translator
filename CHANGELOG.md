@@ -2,6 +2,12 @@
 
 ## 0.3.0 — 2026-10-18
 
+### Submission compliance（按 Obsidian 审核要求）
+- `manifest.description` 改为英文、动作开头、87 字符（限 250）。
+- 去掉设置页顶部的 `<h2>` 插件名标题（Obsidian 自己会显示插件名）。
+- 首次启用弹一次网络使用告知：会向 Google / MyMemory（或 DeepSeek）发送待译文本，可关闭。
+- README 补「Network use」「Requirements」「Not affiliated」三段；明确折叠时不外发、无遥测、不落盘。
+
 界面按「栏注（Rail Note）」方向重做：原文实线、机器译文节奏线，控件是 ghost。
 
 ### Changed

@@ -24,6 +24,7 @@ const DEFAULT_SETTINGS = {
     idleMs: 1800,       // 静默多久后把剩下的尾巴也翻掉
     glossary: 'vault skill token agent prompt session Claudian Obsidian DeepSeek omp MCP CLI',
     translateExistingOnLoad: false,
+    networkNoticeShown: false,
     debug: false,
 };
 
@@ -652,6 +653,15 @@ class ClaudianThinkingTranslator extends Plugin {
 
         this.addSettingTab(new CTTSettingTab(this.app, this));
 
+        if (!this.settings.networkNoticeShown) {
+            this.settings.networkNoticeShown = true;
+            await this.saveData(this.settings);
+            new Notice(
+                '思考翻译会把待译文本发送到 Google / MyMemory（默认引擎），可选 DeepSeek。可在插件设置里关闭或换引擎。',
+                9000
+            );
+        }
+
         if (this.settings.enabled) this.startScanner();
         this.log('loaded');
     }
@@ -1016,7 +1026,6 @@ class CTTSettingTab extends PluginSettingTab {
         const p = this.plugin;
         const s = p.settings;
 
-        containerEl.createEl('h2', { text: 'Claudian 思考翻译' });
         containerEl.createEl('p', {
             cls: 'setting-item-description',
             text: '只在展开思考块时翻译；默认显示译文，点击「原文」可切换。免费机翻不需要密钥；选 DeepSeek 时密钥从 1Password 读取，不落盘。',
