@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.3 — 2026-10-18
+
+### Fixed（社区目录审核警告）
+- 不再经 shell 执行命令（`child_process` + `/bin/sh` 被判「Shell 执行」）。改为按绝对路径候选直接 `execFile`，靠 ENOENT 逐个跳过。
+- 新增设置项「1Password CLI 路径」：留空自动尝试 `/opt/homebrew/bin/op`、`/usr/local/bin/op` 等，填绝对路径最稳。
+
 ## 0.3.2 — 2026-10-18
 
 ### Fixed（社区目录审核警告）

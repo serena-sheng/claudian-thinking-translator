@@ -21,6 +21,7 @@ const DEFAULT_SETTINGS = {
     idleMs: 1800,       // 静默多久后把剩下的尾巴也翻掉
     glossary: 'vault skill token agent prompt session Claudian Obsidian DeepSeek omp MCP CLI',
     translateExistingOnLoad: false,
+    opPath: '',
     networkNoticeShown: false,
     debug: false,
 };
@@ -45,12 +46,14 @@ function execFileP(cmd, args, opts) {
 
 /**
  * Obsidian 的 GUI 进程 PATH 很窄，直接 execFile('op') 常常 ENOENT。
- * 交给登录 shell 解析 PATH（不读环境、不碰文件系统），密钥只走 stdin/参数传递。
+ * 这里只按绝对路径候选逐个尝试执行，不读环境变量、不碰文件系统、不经 shell。
+ * 用户可在设置里显式指定 op 路径。
  */
-function opRead(ref, timeoutMs) {
-    return execFileP('/bin/sh', ['-lc', 'op read "$1"', 'sh', ref], {
-        timeout: timeoutMs || 30000,
-    });
+function opCandidates(preferred) {
+    const list = [];
+    if (preferred) list.push(preferred);
+    list.push('/opt/homebrew/bin/op', '/usr/local/bin/op', '/usr/bin/op', 'op');
+    return Array.from(new Set(list));
 }
 
 function countLetters(t) {
@@ -917,20 +920,27 @@ class ClaudianThinkingTranslator extends Plugin {
         const ref = String(this.settings.secretRef || '').trim();
         let key = '';
         if (ref.startsWith('op://')) {
-            try {
-                key = (await opRead(ref)).trim();
-            } catch (e) {
-                this.keyFailAt = Date.now();
-                const msg = String((e && e.message) || e);
-                throw new Error(
-                    msg.includes('command not found') || msg.includes('ENOENT')
-                        ? '找不到 1Password CLI（op），请确认已安装'
-                        : '1Password 取密钥失败（需要解锁或 Touch ID）：' + msg
-                );
+            const bins = opCandidates(String(this.settings.opPath || '').trim());
+            let tried = 0;
+            for (const bin of bins) {
+                tried++;
+                try {
+                    key = (await execFileP(bin, ['read', ref], { timeout: 30000 })).trim();
+                    if (key) break;
+                } catch (e) {
+                    const msg = String((e && e.message) || e);
+                    if (msg.includes('ENOENT')) continue;
+                    this.keyFailAt = Date.now();
+                    throw new Error('1Password 取密钥失败（需要解锁或 Touch ID）：' + msg);
+                }
             }
             if (!key) {
                 this.keyFailAt = Date.now();
-                throw new Error('1Password 返回了空密钥');
+                throw new Error(
+                    '找不到 1Password CLI（op），试过 ' +
+                        tried +
+                        ' 个位置；可在插件设置里填写 op 的绝对路径'
+                );
             }
         } else if (ref) {
             key = ref;
@@ -1073,6 +1083,18 @@ class CTTSettingTab extends PluginSettingTab {
             .addText((t) =>
                 t.setValue(s.apiBase).onChange(async (v) => {
                     s.apiBase = v.trim() || DEFAULT_SETTINGS.apiBase;
+                    await p.saveSettings();
+                })
+            );
+
+        new Setting(containerEl)
+            .setName('1Password CLI 路径')
+            .setDesc('留空则依次尝试 /opt/homebrew/bin/op、/usr/local/bin/op 等；填绝对路径最稳')
+            .addText((t) =>
+                t.setValue(s.opPath || '').onChange(async (v) => {
+                    s.opPath = v.trim();
+                    p.keyCache = null;
+                    p.keyFailAt = 0;
                     await p.saveSettings();
                 })
             );
